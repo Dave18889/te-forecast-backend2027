@@ -37,6 +37,7 @@ header {
   padding: 8px 14px; border-radius: 20px; cursor: pointer; border: none; white-space: nowrap;
 }
 .clash-badge-global.warn { background: var(--accent); color: #fff; }
+.clash-badge-global.backtoback { background: var(--gold); color: #fff; }
 .clash-badge-global.clear { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.7); cursor: default; }
 h1 {
   font-family: 'Libre Franklin', sans-serif; font-weight: 800; font-size: 38px; margin: 0;
@@ -203,6 +204,7 @@ mark { background: #FDE9A8; color: var(--text); padding: 0 3px; border-radius: 2
 .person-header:hover { background: var(--bg-soft); }
 .person-item.open .person-header { background: var(--bg-soft); border-color: var(--navy); }
 .person-item.has-clash .person-header { border-left: 3px solid var(--accent); }
+.person-item.has-backtoback .person-header { border-left: 3px solid var(--gold); }
 .person-chevron { font-family: 'IBM Plex Mono', monospace; font-size: 15px; color: var(--accent); width: 14px; flex-shrink: 0; transition: transform 0.2s ease; }
 .person-item.open .person-chevron { transform: rotate(90deg); }
 .person-name { font-family: 'Libre Franklin', sans-serif; font-weight: 700; font-size: 15px; color: var(--navy); flex: 1.4; }
@@ -210,6 +212,7 @@ mark { background: #FDE9A8; color: var(--text); padding: 0 3px; border-radius: 2
 .clash-status { font-family: 'Inter', sans-serif; font-size: 11.5px; font-weight: 700; padding: 5px 12px; border-radius: 20px; white-space: nowrap; }
 .clash-status.clear { background: var(--green-soft); color: var(--green); }
 .clash-status.warn { background: var(--clash-soft); color: var(--accent); }
+.clash-status.backtoback { background: var(--gold-soft); color: var(--gold); }
 .person-body {
   max-height: 0; opacity: 0; overflow: hidden; padding: 0 20px;
   transition: max-height 0.28s ease, opacity 0.2s ease, padding 0.28s ease;
@@ -218,6 +221,9 @@ mark { background: #FDE9A8; color: var(--text); padding: 0 3px; border-radius: 2
 .clash-row { background: var(--clash-soft); }
 .clash-row:hover { background: #F9DADD !important; }
 .clash-flag { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 700; color: var(--clash); font-family: 'IBM Plex Mono', monospace; }
+.backtoback-row { background: var(--gold-soft); }
+.backtoback-row:hover { background: #F2E5C8 !important; }
+.backtoback-flag { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 700; color: var(--gold); font-family: 'IBM Plex Mono', monospace; }
 .person-table-scroll { overflow-x: auto; }
 
 .cost-headline {
