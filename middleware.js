@@ -11,6 +11,12 @@ export const config = {
 };
 
 export default function middleware(request) {
+  // If no password has been configured yet, don't prompt for one — the
+  // site should work normally until SITE_USER/SITE_PASSWORD are both set.
+  if (!process.env.SITE_USER || !process.env.SITE_PASSWORD) {
+    return next();
+  }
+
   const auth = request.headers.get('authorization');
 
   if (auth && auth.startsWith('Basic ')) {
