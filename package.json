@@ -1,0 +1,19 @@
+{
+  "name": "te-portal-2027",
+  "version": "1.0.0",
+  "description": "Live web portal for the 2027 Gartner T&E Forecast — browse by region, person clash checks, and cost summary",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@vercel/edge": "^1.1.1",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  }
+}
