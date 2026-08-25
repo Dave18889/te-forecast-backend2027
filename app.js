@@ -4,6 +4,24 @@ let COST_SUMMARY = null;
 let CLASHES = [];
 let PEG_RATES = {};
 const REGION_CURRENCY = {}; // region -> currency code, derived from records
+const CODE_VENUE = {}; // conference code -> venue, derived from records
+
+// A clash is a "back-to-back" (not a real scheduling problem) when both
+// events are in the same city/country — compares the last two comma-
+// separated parts of the venue string rather than the exact venue, so a
+// same-city change of hotel still counts.
+function locationKey(venue) {
+  if (!venue) return null;
+  const parts = venue.split(',').map(s => s.trim()).filter(Boolean);
+  if (parts.length < 2) return venue.trim().toLowerCase();
+  return parts.slice(-2).join(', ').toLowerCase();
+}
+function clashType(entry) {
+  const locA = locationKey(CODE_VENUE[entry.event]);
+  const locB = locationKey(CODE_VENUE[entry.clashesWith]);
+  if (locA && locB && locA === locB) return 'backToBack';
+  return 'clash';
+}
 
 const CURRENCY_SYMBOL = { USD: '$', GBP: '£', AUD: 'A$', INR: '\u20b9', EUR: '\u20ac', BRL: 'R$', CAD: 'C$', SGD: 'S$', JPY: '\u00a5' };
 function currencySymbol(code) { return CURRENCY_SYMBOL[code] || (code || ''); }
@@ -28,6 +46,7 @@ async function loadLiveData() {
 
     REGIONS = ["NA","LATAM","EMEA","INDIA","APAC","JAPAN"].filter(r => RECORDS.some(rec => rec.region === r));
     RECORDS.forEach(r => { if (r.currency && !REGION_CURRENCY[r.region]) REGION_CURRENCY[r.region] = r.currency; });
+    RECORDS.forEach(r => { if (r.code && r.venue && !CODE_VENUE[r.code]) CODE_VENUE[r.code] = r.venue; });
     if (!currentRegion) currentRegion = REGIONS[0];
 
     dot.className = 'live-dot';
@@ -436,19 +455,41 @@ function renderAll() { renderTabs(); renderRegionSummary(); renderChips(); rende
 searchInput.addEventListener('input', renderConfList);
 
 // ---- Clash lookups (sourced from the sheet's own live Clashes tab) ----
+// Each entry is classified as a real 'clash' (different locations,
+// genuinely conflicting) or a 'backToBack' (same city, just a same-day
+// handoff — not a problem, just worth flagging).
 function clashesForPerson(person) {
   return CLASHES.filter(c => c.person === person);
 }
-function recordHasClash(record) {
-  return CLASHES.some(c => c.person === record.person && c.event === record.code);
+function personClashSummary(person) {
+  const entries = clashesForPerson(person);
+  const clashEntries = entries.filter(e => clashType(e) === 'clash');
+  const backEntries = entries.filter(e => clashType(e) === 'backToBack');
+  return { entries, clashEntries, backEntries };
+}
+// Returns 'clash', 'backToBack', or null for a specific record (a record
+// can have multiple flagged entries — 'clash' wins if any entry is a real
+// clash, even if others are back-to-back).
+function recordClashType(record) {
+  const entries = CLASHES.filter(c => c.person === record.person && c.event === record.code);
+  if (entries.length === 0) return null;
+  return entries.some(e => clashType(e) === 'clash') ? 'clash' : 'backToBack';
 }
 
 function renderGlobalClashBadge() {
   const badge = document.getElementById('clashBadgeGlobal');
-  const count = new Set(CLASHES.map(c => c.person)).size;
-  if (count > 0) {
+  const clashPeople = new Set(CLASHES.filter(c => clashType(c) === 'clash').map(c => c.person));
+  const backOnlyPeople = new Set(
+    CLASHES.filter(c => clashType(c) === 'backToBack' && !clashPeople.has(c.person)).map(c => c.person)
+  );
+
+  if (clashPeople.size > 0) {
     badge.className = 'clash-badge-global warn';
-    badge.textContent = `\u26a0 ${count} people with overlapping trips`;
+    badge.textContent = `\u26a0 ${clashPeople.size} people with overlapping trips`;
+    badge.onclick = () => { setMode('person'); };
+  } else if (backOnlyPeople.size > 0) {
+    badge.className = 'clash-badge-global backtoback';
+    badge.textContent = `\u21c4 ${backOnlyPeople.size} people with back-to-back stays`;
     badge.onclick = () => { setMode('person'); };
   } else {
     badge.className = 'clash-badge-global clear';
@@ -499,13 +540,14 @@ document.getElementById('exportPersonBtn').onclick = () => {
   people.forEach(person => {
     const records = RECORDS.filter(r => r.person === person).slice().sort((a,b) => (a.inDate||'').localeCompare(b.inDate||''));
     records.forEach(r => {
+      const type = recordClashType(r);
       rows.push([person, r.region, r.conference, r.role, r.inDate || '', r.outDate || '',
         r.totalBudget ?? '', REGION_CURRENCY[r.region] || '',
-        recordHasClash(r) ? 'Yes' : 'No']);
+        type === 'clash' ? 'Clash' : type === 'backToBack' ? 'Back-to-back' : '']);
     });
   });
   downloadCSV('people-conferences.csv',
-    ['Person','Region','Conference','Role','In Date','Out Date','Total Budget','Currency','Overlaps Another Trip'],
+    ['Person','Region','Conference','Role','In Date','Out Date','Total Budget','Currency','Overlap Type'],
     rows);
 };
 
@@ -536,8 +578,9 @@ function renderPersonView() {
     const records = RECORDS.filter(r => r.person === person)
       .slice()
       .sort((a,b) => (a.inDate||'').localeCompare(b.inDate||''));
-    const personClashes = clashesForPerson(person);
-    const hasClash = personClashes.length > 0;
+    const { clashEntries, backEntries } = personClashSummary(person);
+    const hasClash = clashEntries.length > 0;
+    const hasBackToBack = backEntries.length > 0;
     if (hasClash) totalClashCount++;
     const isOpen = openPersons.has(person);
 
@@ -561,7 +604,17 @@ function renderPersonView() {
     }, 0);
 
     const item = document.createElement('div');
-    item.className = 'person-item' + (isOpen ? ' open' : '') + (hasClash ? ' has-clash' : '');
+    item.className = 'person-item' + (isOpen ? ' open' : '')
+      + (hasClash ? ' has-clash' : (hasBackToBack ? ' has-backtoback' : ''));
+
+    let statusHtml;
+    if (hasClash) {
+      statusHtml = `<div class="clash-status warn">\u26a0 ${clashEntries.length} overlapping trip${clashEntries.length===1?'':'s'}</div>`;
+    } else if (hasBackToBack) {
+      statusHtml = `<div class="clash-status backtoback">\u21c4 ${backEntries.length} back-to-back${backEntries.length===1?'':'s'}</div>`;
+    } else {
+      statusHtml = `<div class="clash-status clear">\u2713 No clashes</div>`;
+    }
 
     const header = document.createElement('div');
     header.className = 'person-header';
@@ -569,7 +622,7 @@ function renderPersonView() {
       <span class="person-chevron">\u203a</span>
       <div class="person-name">${person}</div>
       <div class="person-meta">${records.length} conference${records.length === 1 ? '' : 's'} \u00b7 ${totalTravelDays} travel day${totalTravelDays === 1 ? '' : 's'} \u00b7 ${budgetTotalText} total</div>
-      <div class="clash-status ${hasClash ? 'warn' : 'clear'}">${hasClash ? `\u26a0 ${personClashes.length} overlapping trip${personClashes.length===1?'':'s'}` : '\u2713 No clashes'}</div>
+      ${statusHtml}
     `;
     header.onclick = () => {
       if (openPersons.has(person)) openPersons.delete(person);
@@ -586,12 +639,18 @@ function renderPersonView() {
     table.innerHTML = `<thead><tr><th>Region</th><th>Conference</th><th>Role</th><th>In Date</th><th>Out Date</th><th>Total Budget</th></tr></thead>`;
     const tbody = document.createElement('tbody');
     records.forEach(r => {
-      const clashed = recordHasClash(r);
+      const type = recordClashType(r);
       const tr = document.createElement('tr');
-      if (clashed) tr.className = 'clash-row';
+      if (type === 'clash') tr.className = 'clash-row';
+      else if (type === 'backToBack') tr.className = 'backtoback-row';
+      const flag = type === 'clash'
+        ? ' <span class="clash-flag">\u26a0 overlap</span>'
+        : type === 'backToBack'
+          ? ' <span class="backtoback-flag">\u21c4 back-to-back</span>'
+          : '';
       tr.innerHTML = `
         <td>${r.region}</td>
-        <td>${r.conference}${clashed ? ' <span class="clash-flag">\u26a0 overlap</span>' : ''}</td>
+        <td>${r.conference}${flag}</td>
         <td><span class="role-pill">${r.role}</span></td>
         <td>${fmtDateFull(r.inDate)}</td>
         <td>${fmtDateFull(r.outDate)}</td>
